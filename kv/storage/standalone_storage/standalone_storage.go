@@ -1,6 +1,8 @@
 package standalone_storage
 
 import (
+	"errors"
+
 	"github.com/Connor1996/badger"
 	"github.com/pingcap-incubator/tinykv/kv/config"
 	"github.com/pingcap-incubator/tinykv/kv/storage"
@@ -46,13 +48,22 @@ func (s *StandAloneStorage) Write(ctx *kvrpcpb.Context, batch []storage.Modify) 
 	// Your Code Here (1).
 	wb := new(engine_util.WriteBatch)
 	for _, item := range batch {
-		wb.SetCF(item.Cf(), item.Key(), item.Value())
+		switch item.Data.(type) {
+		case storage.Put:
+			wb.SetCF(item.Cf(), item.Key(), item.Value())
+		case storage.Delete:
+			wb.DeleteCF(item.Cf(), item.Key())
+		}
 	}
 	return wb.WriteToDB(s.db)
 }
 
 func (s *StandAloneStorage) GetCF(cf string, key []byte) ([]byte, error) {
-	return engine_util.GetCF(s.db, cf, key)
+	data, err := engine_util.GetCF(s.db, cf, key)
+	if errors.Is(err, badger.ErrKeyNotFound) {
+		return nil, nil
+	}
+	return data, err
 }
 
 func (s *StandAloneStorage) IterCF(cf string) engine_util.DBIterator {
